@@ -1,0 +1,44 @@
+name: 🚀 Production Deploy
+
+# Trigger workflow only when code is pushed to master
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  deploy:
+    name: Deploy Backend to DigitalOcean
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+
+    steps:
+      # Step 1: Checkout the repository
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      # Step 2: Setup SSH Agent for secure access
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.8.1
+        with:
+          ssh-private-key: ${{ secrets.DO_SSH_KEY }}
+
+      # Step 3: Add droplet to known hosts to avoid manual prompt
+      - name: Add droplet to known hosts
+        run: |
+          ssh-keyscan -H ${{ secrets.DO_SERVER_IP }} >> ~/.ssh/known_hosts
+
+      # Step 4: Run deployment script via SSH
+      - name: Deploy via SSH
+        run: |
+          ssh ${{ secrets.DO_SSH_USER }}@${{ secrets.DO_SERVER_IP }} << 'EOF'
+            set -e  # Stop if any command fails
+            echo "🛠 Starting deployment..."
+            cd ~/job-automation-suite-backend
+            git fetch --all
+            git reset --hard origin/master
+            npm install --production
+            pm2 restart jobsearch-backend || pm2 start index.js --name jobsearch-backend
+            echo "✅ Deployment completed!"
+          EOF
