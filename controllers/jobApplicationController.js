@@ -174,8 +174,6 @@ export const sendBatchApplications = async (req, res) => {
 
 export const getDashboardStats = async (req, res) => {
   try {
-    
-
     // Get all job contacts
     const allContacts = await JobContact.find({});
 
@@ -233,13 +231,36 @@ export const getDashboardStats = async (req, res) => {
       c.nextFollowUpDate && c.nextFollowUpDate <= tomorrow
     ).length;
 
-    // Priority distribution
-    const high = allContacts.filter(c => c.priority === 'high').length;
-    const medium = allContacts.filter(c => c.priority === 'medium').length;
-    const low = allContacts.filter(c => c.priority === 'low').length;
-    const unprioritized = allContacts.filter(c => !c.priority || c.priority === '').length;
+    // Applications for last 7 days - one per day
+    const lastWeekApplications = {};
 
-    // Construct response
+    // Get applications for each of the last 7 days
+    for (let i = 6; i >= 0; i--) {
+      const date = new Date();
+      date.setDate(date.getDate() - i);
+
+      // Format as "Wed-14"
+      const dayName = date.toLocaleDateString('en-US', { weekday: 'short' });
+      const dayNumber = date.getDate();
+      const key = `${dayName}-${dayNumber}`;
+
+      // Start and end of this day
+      const startOfDay = new Date(date);
+      startOfDay.setHours(0, 0, 0, 0);
+      const endOfDay = new Date(date);
+      endOfDay.setHours(23, 59, 59, 999);
+
+      // Count applications for this day
+      const count = allContacts.filter(c =>
+        c.initialReach &&
+        c.createdAt >= startOfDay &&
+        c.createdAt <= endOfDay
+      ).length;
+
+      lastWeekApplications[key] = count;
+    }
+
+    // Construct response - REPLACED priorityFocus with lastWeekApplications
     const dashboardData = {
       overview: {
         totalApplications,
@@ -259,12 +280,8 @@ export const getDashboardStats = async (req, res) => {
         avgDaysToResponse: parseFloat(avgDaysToResponse),
         followUpsNeeded
       },
-      priorityFocus: {
-        high,
-        medium,
-        low,
-        unprioritized
-      }
+      // REPLACED: priorityFocus with lastWeekApplications (7 days data)
+      lastWeekApplications
     };
 
     res.status(200).json({

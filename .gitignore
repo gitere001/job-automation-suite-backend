@@ -11,3 +11,4 @@ coverage/
 importJobBoards.js
 job_boards_kenya.json
 importData.js
+createAdminUser.js
