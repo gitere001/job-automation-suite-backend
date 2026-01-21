@@ -35,10 +35,10 @@ jobs:
           ssh ${{ secrets.DO_SSH_USER }}@${{ secrets.DO_SERVER_IP }} << 'EOF'
             set -e  # Stop if any command fails
             echo "🛠 Starting deployment..."
-            cd ~/job-automation-suite-backend
+            cd ${{ vars.APP_PATH }}
             git fetch --all
             git reset --hard origin/master
             npm install --production
-            pm2 restart jobsearch-backend || pm2 start index.js --name jobsearch-backend
+            pm2 restart ${{ vars.PM2_APP_NAME }} || pm2 start index.js --name ${{ vars.PM2_APP_NAME }}
             echo "✅ Deployment completed!"
           EOF
