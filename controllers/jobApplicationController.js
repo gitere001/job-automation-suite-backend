@@ -170,3 +170,115 @@ export const sendBatchApplications = async (req, res) => {
     });
   }
 };
+
+
+export const getDashboardStats = async (req, res) => {
+  try {
+    
+
+    // Get all job contacts
+    const allContacts = await JobContact.find({});
+
+    // Calculate dates for this week (Monday to Sunday)
+    const now = new Date();
+    const startOfWeek = new Date(now.setDate(now.getDate() - now.getDay() + 1));
+    startOfWeek.setHours(0, 0, 0, 0);
+    const endOfWeek = new Date(startOfWeek);
+    endOfWeek.setDate(startOfWeek.getDate() + 6);
+    endOfWeek.setHours(23, 59, 59, 999);
+
+    // Helper function to check if date is this week
+    const isThisWeek = (date) => date >= startOfWeek && date <= endOfWeek;
+
+    // Calculate stats
+    const totalApplications = allContacts.filter(c => c.initialReach).length;
+    const responded = allContacts.filter(c => c.responseStatus !== 'no_response');
+    const interviewed = allContacts.filter(c => c.responseStatus === 'interview');
+    const offers = allContacts.filter(c => c.responseStatus === 'offer');
+
+    const responseRate = totalApplications > 0 ? (responded.length / totalApplications * 100) : 0;
+    const interviewRate = totalApplications > 0 ? (interviewed.length / totalApplications * 100) : 0;
+    const offerRate = totalApplications > 0 ? (offers.length / totalApplications * 100) : 0;
+
+    // Pipeline status
+    const pending = allContacts.filter(c => c.responseStatus === 'no_response').length;
+    const inProcess = allContacts.filter(c => ['replied', 'interview'].includes(c.responseStatus)).length;
+    const rejected = allContacts.filter(c => ['rejected', 'ghosted'].includes(c.responseStatus)).length;
+    const successful = offers.length;
+
+    // Weekly activity
+    const applicationsThisWeek = allContacts.filter(c =>
+      c.initialReach && isThisWeek(c.createdAt)
+    ).length;
+
+    const responsesThisWeek = allContacts.filter(c =>
+      c.responseDate && c.responseStatus !== 'no_response' && isThisWeek(c.responseDate)
+    ).length;
+
+    // Average days to response
+    const respondedContacts = allContacts.filter(c => c.responseDate);
+    const totalResponseDays = respondedContacts.reduce((sum, contact) => {
+      const days = Math.floor((contact.responseDate - contact.createdAt) / (1000 * 60 * 60 * 24));
+      return sum + (days > 0 ? days : 0);
+    }, 0);
+    const avgDaysToResponse = respondedContacts.length > 0 ?
+      (totalResponseDays / respondedContacts.length).toFixed(1) : 0;
+
+    // Follow-ups needed (next 2 days)
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    tomorrow.setHours(23, 59, 59, 999);
+
+    const followUpsNeeded = allContacts.filter(c =>
+      c.nextFollowUpDate && c.nextFollowUpDate <= tomorrow
+    ).length;
+
+    // Priority distribution
+    const high = allContacts.filter(c => c.priority === 'high').length;
+    const medium = allContacts.filter(c => c.priority === 'medium').length;
+    const low = allContacts.filter(c => c.priority === 'low').length;
+    const unprioritized = allContacts.filter(c => !c.priority || c.priority === '').length;
+
+    // Construct response
+    const dashboardData = {
+      overview: {
+        totalApplications,
+        responseRate: parseFloat(responseRate.toFixed(1)),
+        interviewRate: parseFloat(interviewRate.toFixed(1)),
+        offerRate: parseFloat(offerRate.toFixed(1))
+      },
+      pipeline: {
+        pending,
+        inProcess,
+        rejected,
+        successful
+      },
+      weeklyActivity: {
+        applicationsThisWeek,
+        responsesThisWeek,
+        avgDaysToResponse: parseFloat(avgDaysToResponse),
+        followUpsNeeded
+      },
+      priorityFocus: {
+        high,
+        medium,
+        low,
+        unprioritized
+      }
+    };
+
+    res.status(200).json({
+      success: true,
+      data: dashboardData,
+      lastUpdated: new Date().toISOString()
+    });
+
+  } catch (error) {
+    console.error('Dashboard stats error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch dashboard stats',
+      error: error.message
+    });
+  }
+};
