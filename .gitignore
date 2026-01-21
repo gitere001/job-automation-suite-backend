@@ -1,0 +1,13 @@
+company_data.json
+node_modules/
+.env
+*.log
+.env.local
+.env.*.local
+.DS_Store
+*.tmp
+*.swp
+coverage/
+importJobBoards.js
+job_boards_kenya.json
+importData.js
