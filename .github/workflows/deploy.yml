@@ -20,7 +20,7 @@ jobs:
 
       # Step 2: Setup SSH Agent for secure access
       - name: Setup SSH
-        uses: webfactory/ssh-agent@v0.8.1
+        uses: webfactory/ssh-agent@v0.9.0
         with:
           ssh-private-key: ${{ secrets.DO_SSH_KEY }}
 
