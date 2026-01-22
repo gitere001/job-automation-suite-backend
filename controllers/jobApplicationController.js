@@ -1,5 +1,5 @@
-import { sendJobApplication } from '../utils/sendJobApplication.js';
 import JobContact from '../models/JobContact.js';
+import { sendJobApplication } from '../utils/sendJobApplicationResend.js';
 
 /**
  * Controller to handle batch job application sending
@@ -78,6 +78,7 @@ export const sendBatchApplications = async (req, res) => {
           const updateData = {
             name: company.name,
             email: company.email.toLowerCase(),
+            website: company.website ? company.website.toLowerCase() : undefined,
             initialReach: true,
             responseStatus: 'no_response',
             followUpCount: 0,
@@ -188,32 +189,69 @@ export const getDashboardStats = async (req, res) => {
     // Helper function to check if date is this week
     const isThisWeek = (date) => date >= startOfWeek && date <= endOfWeek;
 
-    // Calculate stats
-    const totalApplications = allContacts.filter(c => c.initialReach).length;
-    const responded = allContacts.filter(c => c.responseStatus !== 'no_response');
-    const interviewed = allContacts.filter(c => c.responseStatus === 'interview');
-    const offers = allContacts.filter(c => c.responseStatus === 'offer');
+    // Separate manual and automated applications
+    const manualApps = allContacts.filter(c => c.applicationType === 'manual');
+    const automatedApps = allContacts.filter(c => c.applicationType === 'automated');
 
+    // Calculate stats for ALL applications
+    const totalApplications = allContacts.length;
+    const totalManual = manualApps.length;
+    const totalAutomated = automatedApps.length;
+
+    const responded = allContacts.filter(c => c.responseStatus !== 'no_response');
+    const respondedManual = manualApps.filter(c => c.responseStatus !== 'no_response');
+    const respondedAutomated = automatedApps.filter(c => c.responseStatus !== 'no_response');
+
+    const interviewed = allContacts.filter(c => c.responseStatus === 'interview');
+    const interviewedManual = manualApps.filter(c => c.responseStatus === 'interview');
+    const interviewedAutomated = automatedApps.filter(c => c.responseStatus === 'interview');
+
+    const offers = allContacts.filter(c => c.responseStatus === 'offer');
+    const offersManual = manualApps.filter(c => c.responseStatus === 'offer');
+    const offersAutomated = automatedApps.filter(c => c.responseStatus === 'offer');
+
+    // Calculate rates for ALL
     const responseRate = totalApplications > 0 ? (responded.length / totalApplications * 100) : 0;
     const interviewRate = totalApplications > 0 ? (interviewed.length / totalApplications * 100) : 0;
     const offerRate = totalApplications > 0 ? (offers.length / totalApplications * 100) : 0;
 
-    // Pipeline status
+    // Calculate rates for MANUAL
+    const responseRateManual = totalManual > 0 ? (respondedManual.length / totalManual * 100) : 0;
+    const interviewRateManual = totalManual > 0 ? (interviewedManual.length / totalManual * 100) : 0;
+    const offerRateManual = totalManual > 0 ? (offersManual.length / totalManual * 100) : 0;
+
+    // Calculate rates for AUTOMATED
+    const responseRateAutomated = totalAutomated > 0 ? (respondedAutomated.length / totalAutomated * 100) : 0;
+    const interviewRateAutomated = totalAutomated > 0 ? (interviewedAutomated.length / totalAutomated * 100) : 0;
+    const offerRateAutomated = totalAutomated > 0 ? (offersAutomated.length / totalAutomated * 100) : 0;
+
+    // Pipeline status for ALL
     const pending = allContacts.filter(c => c.responseStatus === 'no_response').length;
     const inProcess = allContacts.filter(c => ['replied', 'interview'].includes(c.responseStatus)).length;
     const rejected = allContacts.filter(c => ['rejected', 'ghosted'].includes(c.responseStatus)).length;
     const successful = offers.length;
 
-    // Weekly activity
+    // Pipeline status by type
+    const pendingManual = manualApps.filter(c => c.responseStatus === 'no_response').length;
+    const pendingAutomated = automatedApps.filter(c => c.responseStatus === 'no_response').length;
+
+    const inProcessManual = manualApps.filter(c => ['replied', 'interview'].includes(c.responseStatus)).length;
+    const inProcessAutomated = automatedApps.filter(c => ['replied', 'interview'].includes(c.responseStatus)).length;
+
+    // Weekly activity for ALL
     const applicationsThisWeek = allContacts.filter(c =>
-      c.initialReach && isThisWeek(c.createdAt)
+      isThisWeek(c.createdAt)
     ).length;
 
     const responsesThisWeek = allContacts.filter(c =>
       c.responseDate && c.responseStatus !== 'no_response' && isThisWeek(c.responseDate)
     ).length;
 
-    // Average days to response
+    // Weekly activity by type
+    const manualAppsThisWeek = manualApps.filter(c => isThisWeek(c.createdAt)).length;
+    const automatedAppsThisWeek = automatedApps.filter(c => isThisWeek(c.createdAt)).length;
+
+    // Average days to response for ALL
     const respondedContacts = allContacts.filter(c => c.responseDate);
     const totalResponseDays = respondedContacts.reduce((sum, contact) => {
       const days = Math.floor((contact.responseDate - contact.createdAt) / (1000 * 60 * 60 * 24));
@@ -221,6 +259,23 @@ export const getDashboardStats = async (req, res) => {
     }, 0);
     const avgDaysToResponse = respondedContacts.length > 0 ?
       (totalResponseDays / respondedContacts.length).toFixed(1) : 0;
+
+    // Average days to response by type
+    const respondedManualContacts = manualApps.filter(c => c.responseDate);
+    const totalResponseDaysManual = respondedManualContacts.reduce((sum, contact) => {
+      const days = Math.floor((contact.responseDate - contact.createdAt) / (1000 * 60 * 60 * 24));
+      return sum + (days > 0 ? days : 0);
+    }, 0);
+    const avgDaysToResponseManual = respondedManualContacts.length > 0 ?
+      (totalResponseDaysManual / respondedManualContacts.length).toFixed(1) : 0;
+
+    const respondedAutomatedContacts = automatedApps.filter(c => c.responseDate);
+    const totalResponseDaysAutomated = respondedAutomatedContacts.reduce((sum, contact) => {
+      const days = Math.floor((contact.responseDate - contact.createdAt) / (1000 * 60 * 60 * 24));
+      return sum + (days > 0 ? days : 0);
+    }, 0);
+    const avgDaysToResponseAutomated = respondedAutomatedContacts.length > 0 ?
+      (totalResponseDaysAutomated / respondedAutomatedContacts.length).toFixed(1) : 0;
 
     // Follow-ups needed (next 2 days)
     const tomorrow = new Date();
@@ -231,8 +286,12 @@ export const getDashboardStats = async (req, res) => {
       c.nextFollowUpDate && c.nextFollowUpDate <= tomorrow
     ).length;
 
-    // Applications for last 7 days - one per day
-    const lastWeekApplications = {};
+    // Applications for last 7 days - by type
+    const lastWeekApplications = {
+      manual: {},
+      automated: {},
+      total: {}
+    };
 
     // Get applications for each of the last 7 days
     for (let i = 6; i >= 0; i--) {
@@ -250,37 +309,74 @@ export const getDashboardStats = async (req, res) => {
       const endOfDay = new Date(date);
       endOfDay.setHours(23, 59, 59, 999);
 
-      // Count applications for this day
-      const count = allContacts.filter(c =>
-        c.initialReach &&
+      // Count applications for this day by type
+      const manualCount = manualApps.filter(c =>
         c.createdAt >= startOfDay &&
         c.createdAt <= endOfDay
       ).length;
 
-      lastWeekApplications[key] = count;
+      const automatedCount = automatedApps.filter(c =>
+        c.createdAt >= startOfDay &&
+        c.createdAt <= endOfDay
+      ).length;
+
+      lastWeekApplications.manual[key] = manualCount;
+      lastWeekApplications.automated[key] = automatedCount;
+      lastWeekApplications.total[key] = manualCount + automatedCount;
     }
 
-    // Construct response - REPLACED priorityFocus with lastWeekApplications
+    // Construct response with breakdown by application type
     const dashboardData = {
       overview: {
         totalApplications,
+        totalManual,
+        totalAutomated,
+        manualPercentage: totalApplications > 0 ? parseFloat((totalManual / totalApplications * 100).toFixed(1)) : 0,
+        automatedPercentage: totalApplications > 0 ? parseFloat((totalAutomated / totalApplications * 100).toFixed(1)) : 0,
         responseRate: parseFloat(responseRate.toFixed(1)),
         interviewRate: parseFloat(interviewRate.toFixed(1)),
         offerRate: parseFloat(offerRate.toFixed(1))
+      },
+      performanceByType: {
+        manual: {
+          responseRate: parseFloat(responseRateManual.toFixed(1)),
+          interviewRate: parseFloat(interviewRateManual.toFixed(1)),
+          offerRate: parseFloat(offerRateManual.toFixed(1)),
+          avgDaysToResponse: parseFloat(avgDaysToResponseManual)
+        },
+        automated: {
+          responseRate: parseFloat(responseRateAutomated.toFixed(1)),
+          interviewRate: parseFloat(interviewRateAutomated.toFixed(1)),
+          offerRate: parseFloat(offerRateAutomated.toFixed(1)),
+          avgDaysToResponse: parseFloat(avgDaysToResponseAutomated)
+        }
       },
       pipeline: {
         pending,
         inProcess,
         rejected,
-        successful
+        successful,
+        byType: {
+          manual: {
+            pending: pendingManual,
+            inProcess: inProcessManual,
+            successful: offersManual.length
+          },
+          automated: {
+            pending: pendingAutomated,
+            inProcess: inProcessAutomated,
+            successful: offersAutomated.length
+          }
+        }
       },
       weeklyActivity: {
         applicationsThisWeek,
+        manualAppsThisWeek,
+        automatedAppsThisWeek,
         responsesThisWeek,
         avgDaysToResponse: parseFloat(avgDaysToResponse),
         followUpsNeeded
       },
-      // REPLACED: priorityFocus with lastWeekApplications (7 days data)
       lastWeekApplications
     };
 
@@ -295,6 +391,236 @@ export const getDashboardStats = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Failed to fetch dashboard stats',
+      error: error.message
+    });
+  }
+};
+
+
+// Add to jobApplicationController.js
+export const getApplications = async (req, res) => {
+  try {
+    // Extract query parameters with defaults
+    const {
+      limit = '20',
+      responseStatus,
+      applicationType,
+      search,
+      sort = '-createdAt' // Default: latest first
+
+    } = req.query;
+
+    // Build filter object
+    const filter = {};
+
+    // Add responseStatus filter if provided
+    if (responseStatus) {
+      filter.responseStatus = responseStatus;
+    }
+    if (applicationType) {
+      filter.applicationType = applicationType;
+    }
+
+    // Add company name search if provided (case-insensitive regex)
+    if (search && search.trim()) {
+      filter.name = { $regex: search.trim(), $options: 'i' };
+    }
+
+    // Determine limit - if "all", don't use limit
+    const limitNum = limit === 'all' ? null : parseInt(limit, 10);
+
+    // Build query with optimization
+    let query = JobContact.find(filter)
+      .sort(sort) // Sort by specified field (default: latest first)
+      .lean(); // Return plain JS objects for better performance
+
+    // Only apply limit if not "all"
+    if (limitNum !== null) {
+      query = query.limit(limitNum);
+    }
+
+    // Execute query - optimized with select only needed fields
+    const applications = await query.select('name email website responseStatus initialReach followUpCount priority createdAt updatedAt responseDate nextFollowUpDate applicationType');
+
+    // Get total count for the applied filters (optimized separate count)
+    const totalCount = await JobContact.countDocuments(filter);
+
+    res.status(200).json({
+      success: true,
+      data: applications,
+      meta: {
+        total: totalCount,
+        returned: applications.length,
+        limit: limitNum === null ? 'all' : limitNum,
+        filters: {
+          responseStatus: responseStatus || 'none',
+          search: search || 'none'
+        }
+      },
+      timestamp: new Date().toISOString()
+    });
+
+  } catch (error) {
+    console.error('Get applications error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch applications',
+      error: error.message
+    });
+  }
+};
+
+
+
+
+// Add manual application tracking
+export const addManualApplication = async (req, res) => {
+  try {
+    const { name, email, website } = req.body;
+
+    // Validate required fields
+    if (!name || !email) {
+      return res.status(400).json({
+        success: false,
+        message: 'Company name and email are required'
+      });
+    }
+
+    // Check if company already exists
+    const existingContact = await JobContact.findOne({
+      email: email.toLowerCase()
+    });
+
+    if (existingContact) {
+      return res.status(400).json({
+        success: false,
+        message: 'Company already exists in database',
+        data: existingContact
+      });
+    }
+
+    // Create new manual application record
+    const newApplication = await JobContact.create({
+      name,
+      email: email.toLowerCase(),
+      website: website ? website.toLowerCase() : undefined,
+      initialReach: true, // Mark as contacted
+      responseStatus: 'no_response',
+      followUpCount: 0,
+      priority: 'medium',
+      lastContacted: new Date(),
+      applicationType: 'manual'
+    });
+
+    console.log(`📝 Manual application added for ${name}`);
+
+    res.status(201).json({
+      success: true,
+      message: 'Manual application tracked successfully',
+      data: newApplication
+    });
+
+  } catch (error) {
+    console.error('Add manual application error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to add manual application',
+      error: error.message
+    });
+  }
+};
+
+// Update response status for any application
+export const updateResponseStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { responseStatus } = req.body;
+
+    // Validate response status
+    const validStatuses = ['no_response', 'replied', 'rejected', 'interview', 'offer', 'ghosted'];
+    if (!validStatuses.includes(responseStatus)) {
+      return res.status(400).json({
+        success: false,
+        message: `Invalid response status. Must be one of: ${validStatuses.join(', ')}`
+      });
+    }
+
+    // Find and update the application
+    const updateData = {
+      responseStatus,
+      responseDate: responseStatus !== 'no_response' ? new Date() : null
+    };
+
+    const updatedApplication = await JobContact.findByIdAndUpdate(
+      id,
+      updateData,
+      { new: true, runValidators: true }
+    );
+
+    if (!updatedApplication) {
+      return res.status(404).json({
+        success: false,
+        message: 'Application not found'
+      });
+    }
+
+    console.log(`🔄 Updated status for ${updatedApplication.name} to: ${responseStatus}`);
+
+    res.status(200).json({
+      success: true,
+      message: 'Response status updated successfully',
+      data: updatedApplication
+    });
+
+  } catch (error) {
+    console.error('Update response status error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update response status',
+      error: error.message
+    });
+  }
+};
+
+// Delete bounced/failed applications
+export const deleteApplication = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Optional: Add a reason for deletion
+    const { reason = 'bounced/removed' } = req.body;
+
+    // Find the application first to log it
+    const application = await JobContact.findById(id);
+
+    if (!application) {
+      return res.status(404).json({
+        success: false,
+        message: 'Application not found'
+      });
+    }
+
+    // Delete the application
+    await JobContact.findByIdAndDelete(id);
+
+    console.log(`🗑️  Deleted application for ${application.name} (${application.email}) - Reason: ${reason}`);
+
+    res.status(200).json({
+      success: true,
+      message: 'Application deleted successfully',
+      deletedData: {
+        name: application.name,
+        email: application.email,
+        deletedAt: new Date().toISOString(),
+        reason: reason
+      }
+    });
+
+  } catch (error) {
+    console.error('Delete application error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to delete application',
       error: error.message
     });
   }

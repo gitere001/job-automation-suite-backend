@@ -14,6 +14,11 @@ const jobContactSchema = new mongoose.Schema(
       trim: true,
       lowercase: true
     },
+    website: {
+      type: String,
+      trim: true,
+      lowercase: true
+    },
 
     // Outreach Tracking
     initialReach: {
@@ -40,6 +45,11 @@ const jobContactSchema = new mongoose.Schema(
       type: String,
       enum: ['low', 'medium', 'high'],
       default: 'medium'
+    },
+    applicationType: {
+      type: String,
+      enum: ['manual', 'automated'],
+      default: 'automated'
     }
   },
   {
