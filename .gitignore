@@ -11,4 +11,7 @@ coverage/
 importJobBoards.js
 job_boards_kenya.json
 importData.js
+createAdminUser.js.github/
+# Disable GitHub Actions temporarily
+.github/
 createAdminUser.js
